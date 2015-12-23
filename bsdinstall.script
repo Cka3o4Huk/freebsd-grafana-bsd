@@ -1,0 +1,6 @@
+export ZFSBOOT_DISKS=vtblk0
+export nonInteractive="YES"
+DISTRIBUTIONS="base.txz kernel.txz"
+
+#!/bin/sh
+pkg install apache24
