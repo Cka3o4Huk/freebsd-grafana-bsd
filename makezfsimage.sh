@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
+SITE='ftp.freebsd.org/pub/FreeBSD/snapshots/i386/i386/10.2-STABLE'
 DISTFILES=('base.txz' 'kernel.txz' 'doc.txz' 'ports.txz')
 
 for DISTFILE in DISTFILES
 do
 	if [ ! -f $DISTFILE ]
 	then
-		wget http://ftp.freebsd.org/pub/FreeBSD/snapshots/i386/i386/10.2-STABLE/$DISTFILE
+		wget http://$SITE/$DISTFILE
 	fi
 done
 
@@ -14,5 +15,7 @@ truncate -s 24G grafana.img
 MD_UNIT=`mdconfig -a -f grafana.img`
 
 echo "export ZFSBOOT_DISKS=$MD_UNIT" > installscript
+echo "BSDINSTALL_DISTSITE=ftp://$SITE" >> installscript
 cat bsdinstall.script >> installscript
 #bsdinstall script installscript
+mdconfig -d -u $MD_UNIT
