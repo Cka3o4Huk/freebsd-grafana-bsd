@@ -23,7 +23,7 @@ fi
 
 echo "### Creating and mounting images..."
 rm -rf $IMAGENAME
-truncate -s 24G $IMAGENsAME
+truncate -s 24G $IMAGENAME
 MD_UNIT=`mdconfig -a -f $IMAGENAME`
 
 echo "export ZFSBOOT_DISKS=$MD_UNIT" > installscript
