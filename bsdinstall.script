@@ -1,5 +1,4 @@
 export nonInteractive="YES"
-BSDINSTALL_DISTDIR="."
 BSDINSTALL_LOG="./bsdinstall.log"
 DISTRIBUTIONS="base.txz kernel.txz doc.txz"
 #!/bin/sh
