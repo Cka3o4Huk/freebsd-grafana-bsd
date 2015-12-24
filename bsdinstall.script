@@ -1,7 +1,7 @@
 export nonInteractive="YES"
 BSDINSTALL_DISTDIR="."
 BSDINSTALL_LOG="./bsdinstall.log"
-DISTRIBUTIONS="base.txz kernel.txz docs.txz"
+DISTRIBUTIONS="base.txz kernel.txz doc.txz"
 #!/bin/sh
 sysrc hostname="grafana-bsd"
 sysrc local_unbound_enable=YES
