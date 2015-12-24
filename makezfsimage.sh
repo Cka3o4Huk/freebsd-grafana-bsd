@@ -3,7 +3,7 @@
 SITE='ftp.freebsd.org/pub/FreeBSD/snapshots/i386/i386/10.2-STABLE'
 DISTFILES=('base.txz' 'kernel.txz' 'doc.txz' 'ports.txz')
 
-for DISTFILE in DISTFILES
+for DISTFILE in ${DISTFILES[@]}
 do
 	if [ ! -f $DISTFILE ]
 	then
