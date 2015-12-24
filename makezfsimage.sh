@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DISTFILES=['base.txz', 'kernel.txz', 'doc.txz', 'ports.txz']
+DISTFILES=('base.txz' 'kernel.txz' 'doc.txz' 'ports.txz')
 
 for DISTFILE in DISTFILES
 do
@@ -15,4 +15,4 @@ MD_UNIT=`mdconfig -a -f grafana.img`
 
 echo "export ZFSBOOT_DISKS=$MD_UNIT" > installscript
 cat bsdinstall.script >> installscript
-bsdinstall script installscript
+#bsdinstall script installscript
