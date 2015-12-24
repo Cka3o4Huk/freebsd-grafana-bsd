@@ -1,6 +1,5 @@
-export ZFSBOOT_DISKS=vtbd0
 export nonInteractive="YES"
-DISTRIBUTIONS="base.txz kernel.txz"
+DISTRIBUTIONS="base.txz kernel.txz docs.txz"
 #!/bin/sh
 sysrc hostname="grafana-bsd"
 sysrc local_unbound_enable=YES
@@ -8,8 +7,11 @@ sysrc ntpd_enable=YES
 sysrc dumpdev=YES
 sysrc zfs_enable=YES
 sysrc ifconfig_vtnet0=DHCP
-pkg install apache24 py27-graphite-web www/mod_wsgi4
-grafana2_enable="YES"
-carbon_enable="YES"
-apache24_enable="YES"
+pkg install apache24 py27-graphite-web www/mod_wsgi4 www/grafana2
+sysrc grafana2_enable="YES"
+sysrc carbon_enable="YES"
+sysrc apache24_enable="YES"
+
+# create netcrk & root users
+# configure apache24 vhosts
 
