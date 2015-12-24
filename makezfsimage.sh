@@ -11,8 +11,17 @@ do
 	fi
 done
 
+if [ -f grafana.img ]
+then
+	echo "File exists"
+	FULLNAME=`readlink -f grafana.img`
+else
+	echo "File doesn't exist"
+fi
+
 truncate -s 24G grafana.img
 MD_UNIT=`mdconfig -a -f grafana.img`
+
 
 echo "export ZFSBOOT_DISKS=$MD_UNIT" > installscript
 echo "BSDINSTALL_DISTSITE=ftp://$SITE" >> installscript
