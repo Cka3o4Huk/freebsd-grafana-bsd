@@ -8,12 +8,131 @@ sysrc local_unbound_enable=YES
 sysrc ntpd_enable=YES
 sysrc dumpdev=YES
 sysrc zfs_enable=YES
+sysrc sshd_enable=YES
 sysrc ifconfig_vtnet0=DHCP
-env ASSUME_ALWAYS_YES=yes pkg install apache24 py27-graphite-web www/mod_wsgi4 www/grafana2
+env ASSUME_ALWAYS_YES=yes pkg install pkg
+
+mkdir -p /usr/local/etc/pkg/repos/
+echo "FreeBSD: { enabled: no }" > /usr/local/etc/pkg/repos/FreeBSD.conf
+echo "i386local: { url: \"pkg+http://localhost:81/packages/i386-10-stable-shaked\", mirror_type: "srv", signature_type: "none"}" > /usr/local/etc/pkg/repos/i386local.conf
+## poudriere bulk -j i386-10-stable -p shaked -c www/apache24 www/py-graphite-web www/mod_wsgi4 www/grafana2 devel/gdb
+env ASSUME_ALWAYS_YES=yes pkg install www/apache24 www/py-graphite-web www/mod_wsgi4 www/grafana2 devel/gdb devel/py-pytz
+rm -rf /usr/local/etc/pkg/repos/
+
 sysrc grafana2_enable="YES"
 sysrc carbon_enable="YES"
 sysrc apache24_enable="YES"
-
 # create netcrk & root users
-# configure apache24 vhosts
+pw useradd netcrk -G operator,wheel
+echo "gowa" | pw usermod root -h 0
+echo "crknet" | pw usermod netcrk -h 0
 
+# Apache must listen 8080 & read VHOST configuration & comment unique module to avoid failures of startup
+sed -i -- -e 's/Listen 80/Listen 8080/g' \
+          -e 's/LoadModule unique_id_module/#LoadModule unique_id_module/g' \
+          -e 's/LoadModule mpm_prefork_module/#LoadModule mpm_prefork_module/g' \
+          -e 's/LoadModule mpm_worker_module/#LoadModule mpm_worker_module/g' \
+          -e 's/#ServerName www.example.com:80/ServerName grafana-bsd:8080/g' \
+          -e 's/#Include etc\/apache24\/extra\/httpd-vhosts.conf/Include etc\/apache24\/extra\/httpd-vhosts.conf/g' \
+ /usr/local/etc/apache24/httpd.conf
+
+#Enable WSGI
+sed -i -- -e 's/#LoadModule wsgi_module/LoadModule wsgi_module/g' /usr/local/etc/apache24/modules.d/270_mod_wsgi.conf
+
+#Grafana must listen HTTP port (tune net.inet.ip.portrange.reservedhigh to allow non-root listening of HTTP port)
+sed -i -- -e 's/;http_port = 3000/http_port = 80/g' /usr/local/etc/grafana2.conf
+echo "net.inet.ip.portrange.reservedhigh=1" >> /etc/sysctl.conf
+
+#Configure graphite settings
+sed -i -- -e 's/#SECRET_KEY = '"'"'UNSAFE_DEFAULT'"'"'/SECRET_KEY = '"'"'ilovemarysha'"'"'/g' \
+          -e 's/#DEBUG/DEBUG/g' \
+          -e 's/#ALLOWED_HOSTS/ALLOWED_HOSTS/g' \
+          -e 's/#TIME_ZONE = '"'"'America\/Los_Angeles'"'"'/TIME_ZONE = '"'"'Europe\/Moscow'"'"'/g' \
+ /usr/local/etc/graphite/local_settings.py
+ 
+#Defaul carbon schemas
+echo "[servers]" > /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = ^servers\." >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 10s:90d" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "[projects]" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = ^projects\." >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 10s:90d" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "[jmeter]" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = ^jmeter\." >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 3s:20d" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "[application]" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = ^application\." >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 10s:30d" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "[carbon]" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = ^carbon\." >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 60:90d" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "[default_1min_for_1day]" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "pattern = .*" >> /usr/local/etc/carbon/storage-schemas.conf
+echo "retentions = 60s:1d" >> /usr/local/etc/carbon/storage-schemas.conf
+
+#Increare max creations
+sed -i -- -e 's/MAX_CREATES_PER_MINUTE = 50/MAX_CREATES_PER_MINUTE = 5000000/g' \
+          -e 's/MAX_UPDATES_PER_SECOND = 500/MAX_UPDATES_PER_SECOND = 5000/g' /usr/local/etc/carbon/carbon.conf
+
+#Local UNBOUND
+unbound-control-setup
+sysrc local_unbound_enable="YES"
+echo "" >> /var/unbound/unbound.conf
+echo "server:" >> /var/unbound/unbound.conf
+echo "        username: unbound" >> /var/unbound/unbound.conf
+echo "        directory: /var/unbound" >> /var/unbound/unbound.conf
+echo "        chroot: /var/unbound" >> /var/unbound/unbound.conf
+echo "        pidfile: /var/run/local_unbound.pid" >> /var/unbound/unbound.conf
+echo "        auto-trust-anchor-file: /var/unbound/root.key" >> /var/unbound/unbound.conf
+echo "" >> /var/unbound/unbound.conf
+echo "include: /var/unbound/conf.d/*.conf" >> /var/unbound/unbound.conf
+
+#Add Google Public DNS
+echo "forward-zone:" > /var/unbound/conf.d/google.conf
+echo "        name: "."" >> /var/unbound/conf.d/google.conf
+echo "        forward-addr: 8.8.8.8" >> /var/unbound/conf.d/google.conf
+
+#Graphite VHOST
+echo "" > /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "<VirtualHost *:8080>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        ServerName grafana-bsd" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo '        DocumentRoot "/usr/local/share/graphite-web/content/"' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        WSGIDaemonProcess graphite processes=5 threads=5 inactivity-timeout=120 display-name=graphite" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        WSGIProcessGroup graphite" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        WSGIApplicationGroup graphite" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        WSGIImportScript /usr/local/etc/graphite/graphite.wsgi process-group=graphite application-group=graphite" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        WSGIScriptAlias / /usr/local/etc/graphite/graphite.wsgi" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        Alias /content/ /usr/local/share/graphite-web/content/" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo '        <Location "/content/">' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "                SetHandler None" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Location>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        Alias /media/ /usr/local/lib/python2.7/site-packages/django" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo '        <Location "/media/">' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "                SetHandler None" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Location>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo '        Alias /static/ "/usr/local/lib/python2.7/site-packages/django/contrib/admin/static/"' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf 
+echo '        <Location "/static/">' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "                SetHandler None" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Location>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo '        <Directory "/usr/local/lib/python2.7/site-packages/django/contrib/admin/static/">' >> /usr/local/etc/apache24/extra/httpd-vhosts.conf 
+echo "                Require all granted" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Directory>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "         <Directory /usr/local/etc/graphite/>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "                Require all granted" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Directory>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        <Directory /usr/local/share/graphite-web/content/>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "                Require all granted" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "        </Directory>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+echo "</VirtualHost>" >> /usr/local/etc/apache24/extra/httpd-vhosts.conf
+
+# Initialize Graphite Database
+cd /usr/local/lib/python2.7/site-packages/graphite/
+yes no | python2.7 manage.py syncdb
+
+# Add RW grant to WWW for sqlite of graphite
+chmod 664 /var/db/graphite/graphite.db
